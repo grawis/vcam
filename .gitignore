@@ -26,3 +26,9 @@ Module.symvers
 Mkfile.old
 dkms.conf
 vcam-util
+
+# Test artifacts
+artifacts/
+
+# Editor files
+.vscode/
