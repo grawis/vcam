@@ -50,6 +50,7 @@ struct vcam_device_format {
     char *name;
     int fourcc;
     int bit_depth;
+    enum v4l2_colorspace colorspace;
 };
 
 struct vcam_device {

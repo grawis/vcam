@@ -25,11 +25,13 @@ static const struct vcam_device_format vcam_supported_fmts[] = {
         .name = "RGB24 (LE)",
         .fourcc = V4L2_PIX_FMT_RGB24,
         .bit_depth = 24,
+        .colorspace = V4L2_COLORSPACE_SRGB,
     },
     {
         .name = "YUV 4:2:2 (YUYV)",
         .fourcc = V4L2_PIX_FMT_YUYV,
         .bit_depth = 16,
+        .colorspace = V4L2_COLORSPACE_SMPTE170M,
     },
 };
 
@@ -112,15 +114,58 @@ static int vcam_g_fmt_vid_cap(struct file *file,
     return 0;
 }
 
-static bool check_supported_pixfmt(struct vcam_device *dev, unsigned int fourcc)
+static const struct vcam_device_format *
+find_device_format(struct vcam_device *dev, unsigned int fourcc)
 {
     int i;
     for (i = 0; i < dev->nr_fmts; i++) {
         if (dev->out_fmts[i].fourcc == fourcc)
-            break;
+            return &dev->out_fmts[i];
     }
 
-    return (i == dev->nr_fmts) ? false : true;
+    return NULL;
+}
+
+static const struct vcam_device_format *
+find_supported_format(unsigned int fourcc)
+{
+    int i;
+    for (i = 0; i < ARRAY_SIZE(vcam_supported_fmts); i++) {
+        if (vcam_supported_fmts[i].fourcc == fourcc)
+            return &vcam_supported_fmts[i];
+    }
+
+    return NULL;
+}
+
+static unsigned int vcam_pixfmt_to_fourcc(pixfmt_t pix_fmt)
+{
+    switch (pix_fmt) {
+    case VCAM_PIXFMT_YUYV:
+        return V4L2_PIX_FMT_YUYV;
+    case VCAM_PIXFMT_RGB24:
+    default:
+        return V4L2_PIX_FMT_RGB24;
+    }
+}
+
+static void fill_pix_format(struct v4l2_pix_format *pix,
+                            const struct vcam_device_format *fmt,
+                            unsigned int width,
+                            unsigned int height)
+{
+    pix->width = width;
+    pix->height = height;
+    pix->pixelformat = fmt->fourcc;
+    pix->field = V4L2_FIELD_NONE;
+    pix->bytesperline = pix->width * fmt->bit_depth / 8;
+    pix->sizeimage = pix->bytesperline * pix->height;
+    pix->colorspace = fmt->colorspace;
+}
+
+static bool check_supported_pixfmt(struct vcam_device *dev, unsigned int fourcc)
+{
+    return find_device_format(dev, fourcc) != NULL;
 }
 
 static void negotiate_resolution(__u32 *width, __u32 *height)
@@ -143,6 +188,7 @@ static int vcam_try_fmt_vid_cap(struct file *file,
                                 struct v4l2_format *f)
 {
     struct vcam_device *dev = (struct vcam_device *) video_drvdata(file);
+    const struct vcam_device_format *fmt;
 
     if (!check_supported_pixfmt(dev, f->fmt.pix.pixelformat)) {
         f->fmt.pix.pixelformat = dev->output_format.pixelformat;
@@ -166,15 +212,10 @@ static int vcam_try_fmt_vid_cap(struct file *file,
         set_crop_resolution(&f->fmt.pix.width, &f->fmt.pix.height, cropratio);
     }
 
-    f->fmt.pix.field = V4L2_FIELD_NONE;
-    if (f->fmt.pix.pixelformat == V4L2_PIX_FMT_YUYV) {
-        f->fmt.pix.bytesperline = f->fmt.pix.width << 1;
-        f->fmt.pix.colorspace = V4L2_COLORSPACE_SMPTE170M;
-    } else {
-        f->fmt.pix.bytesperline = f->fmt.pix.width * 3;
-        f->fmt.pix.colorspace = V4L2_COLORSPACE_SRGB;
-    }
-    f->fmt.pix.sizeimage = f->fmt.pix.bytesperline * f->fmt.pix.height;
+    fmt = find_device_format(dev, f->fmt.pix.pixelformat);
+    if (!fmt)
+        fmt = find_supported_format(V4L2_PIX_FMT_RGB24);
+    fill_pix_format(&f->fmt.pix, fmt, f->fmt.pix.width, f->fmt.pix.height);
 
     return 0;
 }
@@ -732,34 +773,17 @@ int submitter_thread(void *data)
 static void fill_v4l2pixfmt(struct v4l2_pix_format *fmt,
                             struct vcam_device_spec *dev_spec)
 {
+    const struct vcam_device_format *vcam_fmt;
+
     if (!fmt || !dev_spec)
         return;
 
     memset(fmt, 0x00, sizeof(struct v4l2_pix_format));
-    fmt->width = dev_spec->width;
-    fmt->height = dev_spec->height;
     pr_debug("Filling %dx%d\n", dev_spec->width, dev_spec->height);
 
-    switch (dev_spec->pix_fmt) {
-    case VCAM_PIXFMT_RGB24:
-        fmt->pixelformat = V4L2_PIX_FMT_RGB24;
-        fmt->bytesperline = (fmt->width * 3);
-        fmt->colorspace = V4L2_COLORSPACE_SRGB;
-        break;
-    case VCAM_PIXFMT_YUYV:
-        fmt->pixelformat = V4L2_PIX_FMT_YUYV;
-        fmt->bytesperline = (fmt->width) << 1;
-        fmt->colorspace = V4L2_COLORSPACE_SMPTE170M;
-        break;
-    default:
-        fmt->pixelformat = V4L2_PIX_FMT_RGB24;
-        fmt->bytesperline = (fmt->width * 3);
-        fmt->colorspace = V4L2_COLORSPACE_SRGB;
-        break;
-    }
-
-    fmt->field = V4L2_FIELD_NONE;
-    fmt->sizeimage = fmt->height * fmt->bytesperline;
+    vcam_fmt =
+        find_supported_format(vcam_pixfmt_to_fourcc(dev_spec->pix_fmt));
+    fill_pix_format(fmt, vcam_fmt, dev_spec->width, dev_spec->height);
 }
 
 struct vcam_device *create_vcam_device(size_t idx,
