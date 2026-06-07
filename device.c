@@ -154,6 +154,7 @@ static void fill_pix_format(struct v4l2_pix_format *pix,
                             unsigned int width,
                             unsigned int height)
 {
+    memset(pix, 0, sizeof(*pix));
     pix->width = width;
     pix->height = height;
     pix->pixelformat = fmt->fourcc;
@@ -227,6 +228,9 @@ static int vcam_s_fmt_vid_cap(struct file *file,
     int ret;
 
     struct vcam_device *dev = (struct vcam_device *) video_drvdata(file);
+
+    if (vb2_is_busy(&dev->vb_out_vidq))
+        return -EBUSY;
 
     ret = vcam_try_fmt_vid_cap(file, priv, f);
     if (ret < 0)
@@ -778,7 +782,6 @@ static void fill_v4l2pixfmt(struct v4l2_pix_format *fmt,
     if (!fmt || !dev_spec)
         return;
 
-    memset(fmt, 0x00, sizeof(struct v4l2_pix_format));
     pr_debug("Filling %dx%d\n", dev_spec->width, dev_spec->height);
 
     vcam_fmt =
