@@ -337,39 +337,29 @@ static int vcam_enum_framesizes(struct file *file,
                                 void *priv,
                                 struct v4l2_frmsizeenum *fsize)
 {
-    struct v4l2_frmsize_discrete *size_discrete;
-
     struct vcam_device *dev = (struct vcam_device *) video_drvdata(file);
+
     if (!check_supported_pixfmt(dev, fsize->pixel_format))
         return -EINVAL;
+
+    fsize->type = V4L2_FRMSIZE_TYPE_DISCRETE;
 
     if (!dev->conv_res_on) {
         if (fsize->index > 0)
             return -EINVAL;
 
-        fsize->type = V4L2_FRMSIZE_TYPE_DISCRETE;
-        size_discrete = &fsize->discrete;
-        size_discrete->width = dev->output_format.width;
-        size_discrete->height = dev->output_format.height;
-    } else if (dev->conv_res_on) {
-        if (fsize->index > 0)
-            return -EINVAL;
-
-        fsize->type = V4L2_FRMSIZE_TYPE_DISCRETE;
-        size_discrete = &fsize->discrete;
-        size_discrete->width = dev->output_format.width;
-        size_discrete->height = dev->output_format.height;
+        fsize->discrete.width = dev->output_format.width;
+        fsize->discrete.height = dev->output_format.height;
     } else {
-        if (fsize->index > 0)
+        if (fsize->index >= ARRAY_SIZE(vcam_sizes))
             return -EINVAL;
 
-        fsize->type = V4L2_FRMSIZE_TYPE_STEPWISE;
-        fsize->stepwise.min_width = 64;
-        fsize->stepwise.max_width = 1280;
-        fsize->stepwise.step_width = 2;
-        fsize->stepwise.min_height = 64;
-        fsize->stepwise.max_height = 720;
-        fsize->stepwise.step_height = 2;
+        fsize->discrete = vcam_sizes[fsize->index];
+
+        if (dev->conv_crop_on)
+            set_crop_resolution(&fsize->discrete.width,
+                                &fsize->discrete.height,
+                                dev->fb_spec.cropratio);
     }
 
     return 0;
