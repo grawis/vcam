@@ -80,6 +80,7 @@ struct vcam_device {
 
     /* Submitter thread */
     struct task_struct *sub_thr_id;
+    u32 sequence;
 
     /* Format descriptor */
     size_t nr_fmts;

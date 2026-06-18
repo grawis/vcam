@@ -69,6 +69,7 @@ static int vcam_start_streaming(struct vb2_queue *q, unsigned int count)
     struct vcam_device *dev = q->drv_priv;
 
     /* Try to start kernel thread */
+    dev->sequence = 0;
     dev->sub_thr_id = kthread_create(submitter_thread, dev, "vcam_submitter");
     if (!dev->sub_thr_id) {
         pr_err("Failed to create kernel thread\n");

@@ -468,6 +468,7 @@ static void submit_noinput_buffer(struct vcam_out_buffer *buf,
             memset(vbuf_ptr, 0xff, rowsize * (rows % 255));
     }
 
+    buf->vb.sequence = dev->sequence++;
     buf->vb.vb2_buf.timestamp = ktime_get_ns();
     vb2_buffer_done(&buf->vb.vb2_buf, VB2_BUF_STATE_DONE);
 }
@@ -648,6 +649,7 @@ static void submit_copy_buffer(struct vcam_out_buffer *out_buf,
             }
         }
     }
+    out_buf->vb.sequence = dev->sequence++;
     out_buf->vb.vb2_buf.timestamp = ktime_get_ns();
     vb2_buffer_done(&out_buf->vb.vb2_buf, VB2_BUF_STATE_DONE);
 }
