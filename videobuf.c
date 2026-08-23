@@ -1,5 +1,6 @@
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
+#include <linux/err.h>
 #include <linux/spinlock.h>
 #include <linux/vmalloc.h>
 #include <media/videobuf2-core.h>
@@ -64,15 +65,35 @@ static void vcam_out_buffer_queue(struct vb2_buffer *vb)
     spin_unlock_irqrestore(&dev->out_q_slock, flags);
 }
 
+static void vcam_return_queued_buffers(struct vcam_device *dev)
+{
+    struct vcam_out_queue *q = &dev->vcam_out_vidq;
+    unsigned long flags = 0;
+
+    spin_lock_irqsave(&dev->out_q_slock, flags);
+    while (!list_empty(&q->active)) {
+        struct vcam_out_buffer *buf =
+            list_entry(q->active.next, struct vcam_out_buffer, list);
+
+        list_del(&buf->list);
+        vb2_buffer_done(&buf->vb.vb2_buf, VB2_BUF_STATE_QUEUED);
+    }
+    spin_unlock_irqrestore(&dev->out_q_slock, flags);
+}
+
 static int vcam_start_streaming(struct vb2_queue *q, unsigned int count)
 {
     struct vcam_device *dev = q->drv_priv;
+    int ret;
 
     /* Try to start kernel thread */
     dev->sub_thr_id = kthread_create(submitter_thread, dev, "vcam_submitter");
-    if (!dev->sub_thr_id) {
+    if (IS_ERR(dev->sub_thr_id)) {
+        ret = PTR_ERR(dev->sub_thr_id);
+        dev->sub_thr_id = NULL;
+        vcam_return_queued_buffers(dev);
         pr_err("Failed to create kernel thread\n");
-        return -ECANCELED;
+        return ret;
     }
 
     wake_up_process(dev->sub_thr_id);
