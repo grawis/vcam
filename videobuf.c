@@ -103,18 +103,6 @@ static void vcam_stop_streaming(struct vb2_queue *vb2_q)
     spin_unlock_irqrestore(&dev->out_q_slock, flags);
 }
 
-static void vcam_outbuf_lock(struct vb2_queue *vq)
-{
-    struct vcam_device *dev = vb2_get_drv_priv(vq);
-    mutex_lock(&dev->vcam_mutex);
-}
-
-static void vcam_outbuf_unlock(struct vb2_queue *vq)
-{
-    struct vcam_device *dev = vb2_get_drv_priv(vq);
-    mutex_unlock(&dev->vcam_mutex);
-}
-
 static int vcam_buf_init(struct vb2_buffer *vb)
 {
     struct vcam_out_buffer *buf =
@@ -138,8 +126,6 @@ static const struct vb2_ops vcam_vb2_ops = {
     .buf_queue = vcam_out_buffer_queue,
     .start_streaming = vcam_start_streaming,
     .stop_streaming = vcam_stop_streaming,
-    .wait_prepare = vcam_outbuf_unlock,
-    .wait_finish = vcam_outbuf_lock,
     .buf_init = vcam_buf_init,
     .buf_cleanup = vcam_buf_cleanup,
 };
